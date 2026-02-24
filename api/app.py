@@ -5,13 +5,16 @@ import os
 
 app = Flask(__name__)
 
-# Load model
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "model.pkl")
-model = joblib.load(MODEL_PATH)
+# Load model and stock data
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Load stock data
-DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "stocks.csv")
-df = pd.read_csv(DATA_PATH)
+MODEL_FOLDER = os.path.join(BASE_DIR, "..", "models")
+DATA_PATH = os.path.join(BASE_DIR, "..", "data", "stocks.csv")
+# load stock data
+df=pd.read_csv(DATA_PATH)
+
+def get_available_models():
+    return [f for f in os.listdir(MODEL_FOLDER) if f.endswith(".pkl")]
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -22,12 +25,22 @@ HTML_PAGE = """
 <body>
     <h2>Stock ML Predictor</h2>
     <form method="POST">
+        <label>Select Model:</label><br>
+        <select name="model_name" required>
+            <option value="">-- Select Model --</option>
+            {% for model in models %}
+                <option value="{{ model }}">{{ model }}</option>
+            {% endfor %}
+        </select><br><br>
+
         <label>Enter Stock Name:</label><br>
-        <input type="text" name="stock_name"><br><br>
+        <input type="text" name="stock_name" required><br><br>
+
         <input type="submit" value="Predict">
     </form>
 
     {% if result %}
+        <h3>Using Model: {{ selected_model }}</h3>
         <h3>Stock: {{ stock }}</h3>
         <p>Average Price: {{ avg }}</p>
         <p>Closing Price: {{ close }}</p>
@@ -52,28 +65,35 @@ def home():
     close = None
     pnl = None
     vol = None
+    selected_model=None
+
+    models=get_available_models()
 
     if request.method == "POST":
         try:
+            selected_model = request.form["model_name"]
             stock = request.form["stock_name"].upper()
+             
+            model_path = os.path.join(MODEL_FOLDER, selected_model)
+            model = joblib.load(model_path)
 
             stock_row = df[df["name"] == stock]
 
             if stock_row.empty:
                 raise ValueError("Stock not found!")
 
-            avg = float(stock_row["average_price"].values[0])
-            close = float(stock_row["closing_price"].values[0])
+            avg = float(stock_row["avg_price"].values[0])
+            close = float(stock_row["current_price"].values[0])
 
             # Calculate telemetry
             pnl = ((close - avg) / avg) * 100
             price_vs_avg = close - avg
 
             # Simple volatility using full dataset
-            df["volatility"] = df["closing_price"].pct_change().rolling(2).std()
+            df["volatility"] = df["current_price"].pct_change().rolling(2).std()
             vol = float(df["volatility"].iloc[-1])
 
-            input_data = [[pnl, vol, price_vs_avg]]
+            input_data = [[pnl, vol, price_vs_avg,avg,close]]
             prediction = int(model.predict(input_data)[0])
 
             label_map = {
@@ -90,6 +110,7 @@ def home():
 
     return render_template_string(
         HTML_PAGE,
+        models=models,
         result=result,
         error=error,
         stock=stock,
@@ -97,6 +118,7 @@ def home():
         close=close,
         pnl=round(pnl, 2) if pnl else None,
         vol=round(vol, 5) if vol else None,
+        selected_model=selected_model
     )
 
 

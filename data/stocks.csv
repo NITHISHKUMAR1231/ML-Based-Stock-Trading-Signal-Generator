@@ -1,5 +1,5 @@
-id,name,average_price,closing_price
-1,TATA,450.0,470.0
+id,name,avg_price,current_price
+1,TATA,450.0,456.0
 2,RELIANCE,2500.0,2550.0
 3,INFY,1400.0,1380.0
 4,HDFCBANK,1600.0,1650.0
